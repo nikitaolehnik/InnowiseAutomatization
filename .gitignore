@@ -1,0 +1,5 @@
+/.idea/
+/vendor/
+/credentials.json
+.env
+/node_modules/
