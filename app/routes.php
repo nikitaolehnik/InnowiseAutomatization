@@ -8,6 +8,6 @@ use Slim\Interfaces\RouteCollectorProxyInterface as Group;
 
 return function (App $app) {
     $app->group('/v1', function (Group $group) {
-        $group->post('/test', TestAction::class);
+        $group->any('/test', TestAction::class);
     });
 };
