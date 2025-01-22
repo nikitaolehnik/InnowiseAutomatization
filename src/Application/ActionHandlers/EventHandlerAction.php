@@ -10,7 +10,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 
 //use MongoDB\Client as MongoClient;
 
-class TestAction extends Action
+class EventHandlerAction extends Action
 {
     public function __construct(
         protected LoggerInterface $logger
@@ -20,7 +20,8 @@ class TestAction extends Action
 
     protected function action(): Response
     {
-        $this->logger->log('Hello world!');
+        $this->logger->log($this->getFormData());
+        $this->logger->log($this->request->getBody()->getContents());
 
         return $this->respondNoContent();
     }
