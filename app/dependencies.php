@@ -24,7 +24,7 @@ return function (ContainerBuilder $containerBuilder) {
             return getenv('GOOGLE_APPLICATION_CREDENTIALS') !== null
                 ? new ChatServiceClient([
                 'credentials' => getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            ]) : new ChatServiceClient();
+            ]) : new ChatServiceClient(['projectId' => 'php-helper-dev']);
         }
     ]);
 };
