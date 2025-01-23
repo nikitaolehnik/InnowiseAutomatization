@@ -12,6 +12,7 @@ RUN docker-php-ext-install opcache \
     && apt-get install libicu-dev -y \
     && docker-php-ext-configure intl \
     && docker-php-ext-install intl \
+    && docker-php-ext-install bcmath \
     && apt-get remove libicu-dev icu-devtools -y
 RUN { \
         echo 'opcache.memory_consumption=128'; \
