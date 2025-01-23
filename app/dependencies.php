@@ -21,9 +21,10 @@ return function (ContainerBuilder $containerBuilder) {
             return new MongoClient($_ENV['MONGO_CONNECTION_STRING'], [], ['serverApi' => $apiVersion]);
         },
         ChatServiceClient::class => function () {
-            return new ChatServiceClient([
+            return getenv('GOOGLE_APPLICATION_CREDENTIALS') !== null
+                ? new ChatServiceClient([
                 'credentials' => getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            ]);
+            ]) : new ChatServiceClient();
         }
     ]);
 };
