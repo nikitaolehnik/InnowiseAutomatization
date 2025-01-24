@@ -16,7 +16,7 @@ require __DIR__ . '/../vendor/autoload.php';
 if (!getenv('IS_CLOUD_RUN')) {
     $dotenv = new Dotenv();
     $dotenv->load(__DIR__ . '/../.env');
-    putenv("GOOGLE_APPLICATION_CREDENTIALS=" . __DIR__ . '/../' . '/credentials.json');
+    putenv("GOOGLE_APPLICATION_CREDENTIALS=" . file_get_contents(__DIR__ . '/../' . '/credentials.json'));
 }
 
 $containerBuilder = new ContainerBuilder();

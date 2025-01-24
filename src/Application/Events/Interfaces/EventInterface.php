@@ -4,5 +4,5 @@ namespace App\Application\Events\Interfaces;
 
 interface EventInterface
 {
-    public function handle(array $event): array;
+    public function handle(array $event): void;
 }

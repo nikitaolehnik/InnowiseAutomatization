@@ -6,7 +6,10 @@ use App\Application\Events\Interfaces\EventInterface;
 use App\Domain\Commands\MessageCommandsEnum;
 use Google\Apps\Chat\V1\Client\ChatServiceClient;
 use Google\Apps\Chat\V1\CreateMessageRequest;
+use Google\Apps\Chat\V1\GetMembershipRequest;
+use Google\Apps\Chat\V1\ListMembershipsRequest;
 use Google\Apps\Chat\V1\Message;
+use Google\Apps\Chat\V1\Thread;
 use MongoDB\Client as MongoClient;
 
 class MessageEvent implements EventInterface
@@ -17,12 +20,13 @@ class MessageEvent implements EventInterface
     const COLLECTION_NAME = 'developers';
 
     public function __construct(
-        private readonly MongoClient $client,
+        private readonly MongoClient       $client,
         private readonly ChatServiceClient $chatServiceClient,
-    ) {
+    )
+    {
     }
 
-    public function handle(array $event): array
+    public function handle(array $event): void
     {
         $command = $this->parseCommand($event['message']['text']);
 
@@ -77,23 +81,56 @@ class MessageEvent implements EventInterface
                     ])
                     ->toArray();
 
+                $membersRequest = (new ListMembershipsRequest())
+                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+                    ->setPageSize(1000)
+                    ->setFilter("member.type = \"HUMAN\"");
+                $members = $this->chatServiceClient->listMemberships($membersRequest);
+
                 $mString = '';
                 foreach ($data[0]['M'] as $m) {
-                    $mString .= $m['name']['last_name_en'] . ', ';
+                    $iterator = $members->getIterator();
+
+                    $id = null;
+                    while (($current = $iterator->current()) !== null) {
+                        if ($current->getMember()->getDisplayName() !== "{$m['name']['first_name_en']} {$m['name']['last_name_en']}") {
+                            $iterator->next();
+                            continue;
+                        }
+
+                        $id = explode('/', $current->getMember()->getName())[1];
+                        $iterator->next();
+                    }
+
+                    $mString .= (is_null($id) ? "{$m['name']['first_name_en']} {$m['name']['last_name_en']}" : ("<users/$id>")) . ', ';
                 }
 
                 $mString = rtrim($mString, ', ');
                 $message = new Message();
-                $message->setText("CV - X - X \n👥: {$data[0]['name']['last_name_en']}\nⓂ️: $mString");
+                $message->setText("CV - X - X \n👥: {$data[0]['name']['last_name_en']}\nⓂ️: $mString")
+                    ->setThreadReply(true);
+
                 $request = (new CreateMessageRequest())
                     ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
                     ->setMessage($message);
 
                 $response = $this->chatServiceClient->createMessage($request);
+
+                $thread = new Thread();
+                $thread->setName($response->getThread()->getName());
+
+                $threadMessage = new Message();
+                $threadMessage->setText("CV {$candidate['link']}")
+                    ->setThread($thread);
+
+                $request = (new CreateMessageRequest())
+                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+                    ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
+                    ->setMessage($threadMessage);
+
+                $this->chatServiceClient->createMessage($request);
             }
         }
-
-        return [];
     }
 
     private function parseCommand(string $text): array
