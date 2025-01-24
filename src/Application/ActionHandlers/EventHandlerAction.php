@@ -25,7 +25,7 @@ class EventHandlerAction extends Action
     protected function action(): Response
     {
         $data = json_decode($this->getFormData(), true);
-        $this->logger->log($data);
+        $this->logger->log(json_encode($data));
         $this->eventMapping($data['type'])->handle($data);
 
         return $this->respondNoContent();
