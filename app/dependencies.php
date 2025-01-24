@@ -21,7 +21,6 @@ return function (ContainerBuilder $containerBuilder) {
             return new MongoClient($_ENV['MONGO_CONNECTION_STRING'], [], ['serverApi' => $apiVersion]);
         },
         ChatServiceClient::class => function (ContainerInterface $c) {
-            $c->get(LoggerInterface::class)->log(getenv('GOOGLE_APPLICATION_CREDENTIALS'));
             return new ChatServiceClient([
                 'credentials' => json_decode(getenv('GOOGLE_APPLICATION_CREDENTIALS'), true)
             ]);
