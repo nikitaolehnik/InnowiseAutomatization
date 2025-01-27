@@ -129,6 +129,16 @@ class MessageEvent implements EventInterface
                     ->setMessage($threadMessage);
 
                 $this->chatServiceClient->createMessage($request);
+
+                $message = new Message();
+                $message->setText("You have been send to a new request: XX. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact your M1/M2")
+                    ->setThreadReply(true);
+
+                $request = (new CreateMessageRequest())
+                    ->setParent(ChatServiceClient::spaceName($data[0]['space']))
+                    ->setMessage($message);
+
+                $this->chatServiceClient->createMessage($request);
             }
         }
     }

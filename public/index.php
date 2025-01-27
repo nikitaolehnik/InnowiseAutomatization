@@ -55,11 +55,11 @@ $shutdownHandler = new ShutdownHandler($request, $errorHandler, $displayErrorDet
 register_shutdown_function($shutdownHandler);
 
 set_error_handler(function ($errno, $errstr, $errfile, $errline) {
-    if (str_contains($errfile, 'vendor/google/apps-chat')) {
-        return true;
+    // Suppress only E_USER_DEPRECATED errors from Google Apps Chat library
+    if (str_contains($errfile, 'vendor/google/apps-chat') && $errno == E_USER_DEPRECATED) {
+        return true; // Suppress deprecation warnings
     }
 
-    error_log("Error: [$errno] $errstr in $errfile on line $errline");
     return false;
 });
 

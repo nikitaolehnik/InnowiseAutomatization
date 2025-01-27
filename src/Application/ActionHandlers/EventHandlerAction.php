@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\ActionHandlers;
 
+use App\Application\Events\AddedToSpaceEvent;
 use App\Application\Events\Interfaces\EventInterface;
 use App\Application\Events\MessageEvent;
 use App\Services\Interfaces\LoggerInterface;
@@ -35,6 +36,7 @@ class EventHandlerAction extends Action
     {
         return match ($event) {
             'MESSAGE' => new MessageEvent($this->client, $this->chatServiceClient),
+            'ADDED_TO_SPACE' => new AddedToSpaceEvent($this->client, $this->chatServiceClient),
         };
     }
 }
