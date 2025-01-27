@@ -32,7 +32,7 @@ class AddedToSpaceEvent implements EventInterface
 
         $spaceId = explode('/', $event['space']['name'])[1];
         list($firstName, $lastName) = explode(" ", $event['user']['displayName']);
-        $this->client->selectDatabase(self::DATABASE_NAME)
+        $user = $this->client->selectDatabase(self::DATABASE_NAME)
             ->selectCollection(self::COLLECTION_NAME)
             ->findOneAndUpdate([
                 "name.first_name_en" => $firstName,
@@ -42,6 +42,10 @@ class AddedToSpaceEvent implements EventInterface
                     "space" => $spaceId
                 ]
             ]);
+
+        if (is_null($user)) {
+            return;
+        }
 
         $message = new Message();
         $message->setText("Configuration completed!")
