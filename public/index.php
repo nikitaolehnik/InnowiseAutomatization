@@ -54,6 +54,15 @@ $errorHandler = new HttpErrorHandler($callableResolver, $responseFactory);
 $shutdownHandler = new ShutdownHandler($request, $errorHandler, $displayErrorDetails);
 register_shutdown_function($shutdownHandler);
 
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+    if (str_contains($errfile, 'vendor/google/apps-chat')) {
+        return true;
+    }
+
+    error_log("Error: [$errno] $errstr in $errfile on line $errline");
+    return false;
+});
+
 $app->addRoutingMiddleware();
 
 $app->addBodyParsingMiddleware();

@@ -187,16 +187,16 @@
         },
         {
             "name": "google/apps-chat",
-            "version": "v0.7.1",
+            "version": "v0.7.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/googleapis/php-apps-chat.git",
-                "reference": "0ebb29f86927c48685f4316d355888c8bbb6592f"
+                "reference": "eaf39c7c1f1a3d386ecc9b84a0cfc68a0e59ce28"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/googleapis/php-apps-chat/zipball/0ebb29f86927c48685f4316d355888c8bbb6592f",
-                "reference": "0ebb29f86927c48685f4316d355888c8bbb6592f",
+                "url": "https://api.github.com/repos/googleapis/php-apps-chat/zipball/eaf39c7c1f1a3d386ecc9b84a0cfc68a0e59ce28",
+                "reference": "eaf39c7c1f1a3d386ecc9b84a0cfc68a0e59ce28",
                 "shasum": ""
             },
             "require": {
@@ -232,9 +232,9 @@
             ],
             "description": "Google Apps Chat Client for PHP",
             "support": {
-                "source": "https://github.com/googleapis/php-apps-chat/tree/v0.7.1"
+                "source": "https://github.com/googleapis/php-apps-chat/tree/v0.7.2"
             },
-            "time": "2024-12-12T21:15:35+00:00"
+            "time": "2025-01-24T21:24:06+00:00"
         },
         {
             "name": "google/apps-meet",

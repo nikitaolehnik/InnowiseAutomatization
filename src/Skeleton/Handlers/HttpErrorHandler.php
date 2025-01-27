@@ -6,6 +6,7 @@ namespace App\Skeleton\Handlers;
 
 use App\Skeleton\Actions\ActionError;
 use App\Skeleton\Actions\ActionPayload;
+use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Slim\Exception\HttpBadRequestException;
 use Slim\Exception\HttpException;
@@ -16,7 +17,6 @@ use Slim\Exception\HttpNotImplementedException;
 use Slim\Exception\HttpUnauthorizedException;
 use Slim\Handlers\ErrorHandler as SlimErrorHandler;
 use Throwable;
-use Webmozart\Assert\InvalidArgumentException;
 
 class HttpErrorHandler extends SlimErrorHandler
 {
