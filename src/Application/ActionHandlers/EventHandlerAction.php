@@ -10,6 +10,7 @@ use App\Application\Events\MessageEvent;
 use App\Services\Interfaces\LoggerInterface;
 use App\Skeleton\Actions\Action;
 use Google\Apps\Chat\V1\Client\ChatServiceClient;
+use Google_Service_Calendar;
 use Psr\Http\Message\ResponseInterface as Response;
 use MongoDB\Client as MongoClient;
 
@@ -19,6 +20,7 @@ class EventHandlerAction extends Action
         protected LoggerInterface $logger,
         private readonly MongoClient $client,
         private readonly ChatServiceClient $chatServiceClient,
+        private readonly Google_Service_Calendar $googleCalendar,
     ) {
         parent::__construct($this->logger);
     }
@@ -35,7 +37,7 @@ class EventHandlerAction extends Action
     private function eventMapping(string $event): EventInterface
     {
         return match ($event) {
-            'MESSAGE' => new MessageEvent($this->client, $this->chatServiceClient),
+            'MESSAGE' => new MessageEvent($this->client, $this->chatServiceClient, $this->googleCalendar, $this->logger),
             'ADDED_TO_SPACE' => new AddedToSpaceEvent($this->client, $this->chatServiceClient),
         };
     }

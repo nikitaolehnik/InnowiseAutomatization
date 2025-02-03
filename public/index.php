@@ -54,7 +54,7 @@ $errorHandler = new HttpErrorHandler($callableResolver, $responseFactory);
 $shutdownHandler = new ShutdownHandler($request, $errorHandler, $displayErrorDetails);
 register_shutdown_function($shutdownHandler);
 
-set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+set_error_handler(function ($errno, $errstr, $errfile, $errline) { // TODO: Tricky solution for handle deprecated messages from google chat app package
     // Suppress only E_USER_DEPRECATED errors from Google Apps Chat library
     if (str_contains($errfile, 'vendor/google/apps-chat') && $errno == E_USER_DEPRECATED) {
         return true; // Suppress deprecation warnings

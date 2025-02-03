@@ -10,8 +10,9 @@
     "ext-mongodb": "*",
     "monolog/monolog": "^3.8",
     "google/apps-chat": "^0.7.1",
-    "google/apps-meet": "^0.2.5",
-    "ext-bcmath": "*"
+    "ext-bcmath": "*",
+    "google/apiclient": "^2.18",
+    "google/apiclient-services": "^0.392.0"
   },
   "autoload": {
     "psr-4": {
