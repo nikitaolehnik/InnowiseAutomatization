@@ -171,7 +171,7 @@ class MessageEvent implements EventInterface
     #[ArrayShape(['command' => 'string', 'cvList' => 'array', 'requestName' => 'string'])]
     private function parseCommand(string $text): array
     {
-        $command = explode(' ', mb_ltrim($text, self::BOT_NAME . ' '), 2);
+        $command = explode(' ', mb_substr($text, strlen(self::BOT_NAME . ' '), -1), 2);
         $requestName = preg_split('/CV\s\d+:\s/', $command[1], 2);
         $cvList = preg_split('/CV\s\d+:\s/', $requestName[1], -1, PREG_SPLIT_NO_EMPTY);
 
