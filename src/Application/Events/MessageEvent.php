@@ -54,6 +54,8 @@ class MessageEvent implements EventInterface
             }
 
             $attendees = ['php-preparations@innowise.com'];
+            $mList = [];
+            $candidateList = [];
 
             foreach ($candidates as $candidate) {
                 list($firstName, $lastName) = explode(' ', $candidate['candidate_name']);
@@ -89,6 +91,16 @@ class MessageEvent implements EventInterface
                     ])
                     ->toArray();
 
+                if (!isset($data[0])) {
+                    $this->logger->error("Candidate {$candidate['candidate_name']} is missing in DB!");
+                    continue;
+                }
+
+                $candidateList[] = [
+                    'name' => "{$data[0]['name']['first_name_en']} {$data[0]['name']['last_name_en']}",
+                    'link' => $candidate['link'],
+                ];
+
                 $attendees[] = $data[0]->email;
 
                 $membersRequest = (new ListMembershipsRequest())
@@ -96,9 +108,8 @@ class MessageEvent implements EventInterface
                     ->setPageSize(1000)
                     ->setFilter("member.type = \"HUMAN\"");
                 $members = $this->chatServiceClient->listMemberships($membersRequest);
-
-                $mString = '';
                 $mNames = '';
+
                 foreach ($data[0]['M'] as $m) {
                     $iterator = $members->getIterator();
 
@@ -113,43 +124,19 @@ class MessageEvent implements EventInterface
                         $iterator->next();
                     }
 
-                    $mString .= (is_null($id) ? "{$m['name']['first_name_en']} {$m['name']['last_name_en']}" : ("<users/$id>")) . ', ';
+                    $mList[] = (is_null($id) ? "{$m['name']['first_name_en']} {$m['name']['last_name_en']}" : ("<users/$id>"));
                     $mNames .= "{$m['name']['first_name_en']} {$m['name']['last_name_en']}, ";
                     $attendees[] = $m['email'];
                 }
 
-                $mString = rtrim($mString, ', ');
                 $mNames = rtrim($mNames, ', ');
-                $message = new Message();
-                $message->setText("*{$command['requestName']}* \n👥: {$data[0]['name']['last_name_en']}\nⓂ️: $mString")
-                    ->setThreadReply(true);
-
-                $request = (new CreateMessageRequest())
-                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-                    ->setMessage($message);
-
-                $response = $this->chatServiceClient->createMessage($request);
-
-                $thread = new Thread();
-                $thread->setName($response->getThread()->getName());
-
-                $threadMessage = new Message();
-                $threadMessage->setText("CV {$candidate['link']}")
-                    ->setThread($thread);
-
-                $request = (new CreateMessageRequest())
-                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-                    ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
-                    ->setMessage($threadMessage);
-
-                $this->chatServiceClient->createMessage($request);
 
                 if (!isset($data[0]['space'])) {
                     continue;
                 }
 
                 $message = new Message();
-                $message->setText("You have been send to a new request. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact $mNames}")
+                $message->setText("You have been send to a new request. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact $mNames")
                     ->setThreadReply(true);
 
                 $request = (new CreateMessageRequest())
@@ -159,6 +146,36 @@ class MessageEvent implements EventInterface
                 $this->chatServiceClient->createMessage($request);
             }
 
+            $message = new Message();
+            $mString = join(', ', array_unique($mList));
+            $candidateString = join(', ' ,array_map(fn($candidate) => $candidate['name'], $candidateList));
+
+            $message->setText("*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString")
+                ->setThreadReply(true);
+
+            $request = (new CreateMessageRequest())
+                ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+                ->setMessage($message);
+
+            $response = $this->chatServiceClient->createMessage($request);
+
+            foreach ($candidateList as $candidate) {
+                $thread = new Thread();
+                $thread->setName($response->getThread()->getName());
+
+                $threadMessage = new Message();
+                $threadMessage->setText("CV {$candidate['name']} {$candidate['link']}")
+                    ->setThread($thread);
+
+                $request = (new CreateMessageRequest())
+                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+                    ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
+                    ->setMessage($threadMessage);
+
+                $this->chatServiceClient->createMessage($request);
+            }
+
+            $attendees = array_values(array_unique($attendees));
             $busySlots = $this->getBusySlots($attendees);
             $timeRange = $this->findCommonFreeTime($busySlots);
 
@@ -166,8 +183,8 @@ class MessageEvent implements EventInterface
                 return;
             }
 
-            $calendarEvent = $this->getCalendarEvent(array_unique($attendees), $timeRange);
-            $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+            $calendarEvent = $this->getCalendarEvent($attendees, $timeRange);
+            $r = $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
         }
     }
 
