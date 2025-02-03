@@ -98,6 +98,7 @@ class MessageEvent implements EventInterface
                 $members = $this->chatServiceClient->listMemberships($membersRequest);
 
                 $mString = '';
+                $mNames = '';
                 foreach ($data[0]['M'] as $m) {
                     $iterator = $members->getIterator();
 
@@ -113,10 +114,12 @@ class MessageEvent implements EventInterface
                     }
 
                     $mString .= (is_null($id) ? "{$m['name']['first_name_en']} {$m['name']['last_name_en']}" : ("<users/$id>")) . ', ';
+                    $mNames .= "{$m['name']['first_name_en']} {$m['name']['last_name_en']}, ";
                     $attendees[] = $m['email'];
                 }
 
                 $mString = rtrim($mString, ', ');
+                $mNames = rtrim($mNames, ', ');
                 $message = new Message();
                 $message->setText("*{$command['requestName']}* \n👥: {$data[0]['name']['last_name_en']}\nⓂ️: $mString")
                     ->setThreadReply(true);
@@ -146,7 +149,7 @@ class MessageEvent implements EventInterface
                 }
 
                 $message = new Message();
-                $message->setText("You have been send to a new request. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact $mString")
+                $message->setText("You have been send to a new request. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact $mNames}")
                     ->setThreadReply(true);
 
                 $request = (new CreateMessageRequest())
