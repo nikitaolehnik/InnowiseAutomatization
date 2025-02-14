@@ -3,13 +3,9 @@
 namespace App\Application\Events;
 
 use App\Application\Events\Interfaces\EventInterface;
-use App\Domain\Commands\MessageCommandsEnum;
 use Google\Apps\Chat\V1\Client\ChatServiceClient;
 use Google\Apps\Chat\V1\CreateMessageRequest;
-use Google\Apps\Chat\V1\ListMembershipsRequest;
 use Google\Apps\Chat\V1\Message;
-use Google\Apps\Chat\V1\Thread;
-use JetBrains\PhpStorm\ArrayShape;
 use MongoDB\Client as MongoClient;
 
 class AddedToSpaceEvent implements EventInterface

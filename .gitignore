@@ -1,5 +1,6 @@
 /.idea/
 /vendor/
 /credentials.json
+/credentials_2.json
 .env
 /node_modules/

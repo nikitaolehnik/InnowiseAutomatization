@@ -3,8 +3,10 @@
 namespace App\Application\Events;
 
 use App\Application\Events\Interfaces\EventInterface;
-use App\Domain\Commands\MessageCommandsEnum;
+use App\Domain\Enums\MessageCommandsEnum;
+use App\Domain\Enums\RoomsEnum;
 use App\Services\Interfaces\LoggerInterface;
+use App\Services\ParseService;
 use DateTime;
 use DateTimeInterface;
 use DateTimeZone;
@@ -24,21 +26,25 @@ class MessageEvent implements EventInterface
     const BOT_NAME = '@PHP Bot';
     const SPACE_NAME = 'AAAASkaq4uc';
     const DATABASE_NAME = 'innowise-automatization';
-    const COLLECTION_NAME = 'developers';
+    const COLLECTION_NAME_DEVS = 'developers';
+    const COLLECTION_NAME_CLIENTS = 'clients';
+    const COLLECTION_NAME_REQUESTS = 'requests';
+    const COLLECTION_NAME_INTERVIEWS = 'interviews';
 
     public function __construct(
-        private readonly MongoClient       $client,
-        private readonly ChatServiceClient $chatServiceClient,
+        private readonly MongoClient             $client,
+        private readonly ChatServiceClient       $chatServiceClient,
         private readonly Google_Service_Calendar $googleCalendar,
-        protected LoggerInterface $logger,
-    ) {
+        protected LoggerInterface                $logger,
+    )
+    {
     }
 
     public function handle(array $event): void
     {
-        $command = $this->parseCommand($event['message']['text']);
+        $command = $this->parseCommand($event);
 
-        if (MessageCommandsEnum::from($command['command']) === MessageCommandsEnum::Preparation) {
+        if ($command['command'] === MessageCommandsEnum::Preparation->value) {
             $candidates = [];
 
             foreach ($command['cvList'] as $candidate) {
@@ -60,7 +66,7 @@ class MessageEvent implements EventInterface
             foreach ($candidates as $candidate) {
                 list($firstName, $lastName) = explode(' ', $candidate['candidate_name']);
                 $data = $this->client->selectDatabase(self::DATABASE_NAME)
-                    ->selectCollection(self::COLLECTION_NAME)
+                    ->selectCollection(self::COLLECTION_NAME_DEVS)
                     ->aggregate([
                         [
                             '$match' => [
@@ -72,7 +78,7 @@ class MessageEvent implements EventInterface
                         ],
                         [
                             '$lookup' => [
-                                'from' => self::COLLECTION_NAME,
+                                'from' => self::COLLECTION_NAME_DEVS,
                                 'localField' => 'M',
                                 'foreignField' => '_id',
                                 'as' => 'M_objects'
@@ -148,7 +154,7 @@ class MessageEvent implements EventInterface
 
             $message = new Message();
             $mString = join(', ', array_unique($mList));
-            $candidateString = join(', ' ,array_map(fn($candidate) => $candidate['name'], $candidateList));
+            $candidateString = join(', ', array_map(fn($candidate) => $candidate['name'], $candidateList));
 
             $message->setText("*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString")
                 ->setThreadReply(true);
@@ -183,29 +189,137 @@ class MessageEvent implements EventInterface
                 return;
             }
 
-            $calendarEvent = $this->getCalendarEvent($attendees, $timeRange);
-            $r = $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+            $meetName = 'Request sync ' . $command['clientName'];
+            $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
+            $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+        }
+
+        if ($command['command'] === MessageCommandsEnum::Request->value) {
+            $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_CLIENTS)
+                ->updateOne(
+                    ['name' => $command['clientName']],
+                    ['$set' => ['name' => $command['clientName']]],
+                    ['upsert' => true]
+                );
+
+            $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_REQUESTS)
+                ->insertOne([
+                    'name' => $command['requestName'],
+                    'description' => $command['description'],
+                    'devs_amount' => $command['devsAmount'],
+                    'client' => $command['clientName'],
+                ]);
+        }
+
+        if ($command['command'] === MessageCommandsEnum::Interview->value) {
+            $cursor = $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_DEVS)
+                ->aggregate([
+                    ['$match' => ['name.last_name_ru' => $command['lastNameRu']]],
+                    ['$lookup' => [
+                        'from' => self::COLLECTION_NAME_DEVS,
+                        'localField' => 'M',
+                        'foreignField' => '_id',
+                        'as' => 'M_objects'
+                    ]]
+                ]);
+
+            $data = iterator_to_array($cursor);
+
+            if (!isset($data[0])) {
+                $this->logger->error("Candidate {$command['lastNameRu']} is missing in DB!");
+
+                return;
+            }
+
+            $attendees[] = $data[0]->email;
+            $attendees[] = 'php-interviews@innowise.com';
+            $spaces[] = $data[0]->space;
+
+            foreach ($data[0]['M_objects'] as $m) {
+                $attendees[] = $m['email'];
+                $spaces[] = $m['space'] ?? null;
+            }
+
+            $timeStart = (DateTime::createFromFormat('d.m H:i', $command['dateTime'], new DateTimeZone('CET')));
+            $timeEnd = clone $timeStart;
+            $timeRange = [
+                'start' => $timeStart->modify('-15 minutes'),
+                'end' => $timeEnd->modify('+1 hours'),
+            ];
+
+            $attendees[] = $this->getFreeRoom($timeRange);
+            $meetName = $data[0]['name']['last_name_en'] . '. Support. ' . $command['clientName'];
+            $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
+            $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+
+            $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
+                ->insertOne([
+                    'dev' => $data[0]['name']['last_name_ru'],
+                    'client' => $command['clientName'],
+                    'request' => $event['space']['displayName'],
+                ]);
+
+            $start = $timeRange['start']->format('r');
+            foreach ($spaces as $space) {
+                $message = new Message();
+                $message->setText("You have an appointment. Support meeting is scheduled for $start")
+                    ->setThreadReply(true);
+
+                $request = (new CreateMessageRequest())
+                    ->setParent(ChatServiceClient::spaceName($space))
+                    ->setMessage($message);
+
+                $this->chatServiceClient->createMessage($request);
+            }
+        }
+
+        if ($command['command'] === MessageCommandsEnum::Result->value) {
+            $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
+                ->updateOne(
+                    [
+                        '$and' => [
+                            ['dev' => $command['lastNameRu']],
+                            ['request' => $command['spaceName']],
+                            [
+                                '$or' => [
+                                    ['result' => ['$exists' => false]],
+                                    ['result' => '']
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        '$set' => [
+                            'result' => $command['result']
+                        ],
+                        '$setOnInsert' => [
+                            'dev' => $command['lastNameRu'],
+                            'client' => $command['clientName'],
+                            'request' => $command['spaceName'],
+                        ]
+                    ],
+                    [
+                        'upsert' => true
+                    ]
+                );
         }
     }
 
-    #[ArrayShape(['command' => 'string', 'cvList' => 'array', 'requestName' => 'string'])]
-    private function parseCommand(string $text): array
+    private function parseCommand(array $text): array
     {
-        $command = explode(' ', mb_substr($text, strlen(self::BOT_NAME . ' '), -1), 2);
-        $requestName = preg_split('/CV\s\d+:\s/', $command[1], 2);
-        $cvList = preg_split('/CV\s\d+:\s/', $requestName[1], -1, PREG_SPLIT_NO_EMPTY);
-
-        return [
-            'command' => $command[0],
-            'requestName' => trim($requestName[0]),
-            'cvList' => $cvList
-        ];
+        $parseService = new ParseService($text);
+        return $parseService->ruleEngine();
     }
 
-    private function getCalendarEvent(array $attendees, array $timeRange): Google_Service_Calendar_Event
+    private function getCalendarEvent(array $attendees, array $timeRange, string $meetName): Google_Service_Calendar_Event
     {
         return new Google_Service_Calendar_Event([
-            'summary' => 'Request sync',
+            'summary' => $meetName,
             'start' => [
                 'dateTime' => $timeRange['start']->format(DateTimeInterface::RFC3339),
                 'timeZone' => 'CET',
@@ -226,6 +340,7 @@ class MessageEvent implements EventInterface
                     ],
                 ],
             ],
+            'guestsCanModify' => true,
         ]);
     }
 
@@ -246,14 +361,28 @@ class MessageEvent implements EventInterface
     }
 
     #[ArrayShape(['start' => DateTime::class, 'end' => DateTime::class])]
-    private function findCommonFreeTime(array $busySlots, string $workHoursStart = "09:00", string $workHoursEnd = "18:00"): ?array
+    private function findCommonFreeTime(array $busySlots, string $workHoursStart = "08:00", string $workHoursEnd = "17:00"): ?array
     {
         $currentTime = $this->roundToNearestHalfHour(new DateTime('now', new DateTimeZone('CET')));
         $endTimeToday = new DateTime("today $workHoursEnd", new DateTimeZone('CET'));
 
         for ($dayOffset = 0; $dayOffset < 7; $dayOffset++) {
-            $start = ($dayOffset === 0 && $currentTime < $endTimeToday) ? clone $currentTime : new DateTime("+$dayOffset days $workHoursStart", new DateTimeZone('CET'));
-            $end = new DateTime("+$dayOffset days $workHoursEnd", new DateTimeZone('CET'));
+            $day = new DateTime("+$dayOffset days", new DateTimeZone('CET'));
+            if ($day->format('N') >= 6) {
+                continue;
+            }
+
+            if ($dayOffset === 0 && $currentTime < $endTimeToday) {
+                $start = clone $currentTime;
+            } else {
+                $start = new DateTime("+$dayOffset days", new DateTimeZone('CET'));
+                list($hour, $minute) = explode(':', $workHoursStart);
+                $start->setTime((int)$hour, (int)$minute);
+            }
+
+            $end = new DateTime("+$dayOffset days", new DateTimeZone('CET'));
+            list($hourEnd, $minuteEnd) = explode(':', $workHoursEnd);
+            $end->setTime((int)$hourEnd, (int)$minuteEnd);
 
             while ($start < $end) {
                 $slotEnd = clone $start;
@@ -274,7 +403,9 @@ class MessageEvent implements EventInterface
                             break;
                         }
                     }
-                    if ($conflict) break;
+                    if ($conflict) {
+                        break;
+                    }
                 }
 
                 if (!$conflict) {
@@ -290,14 +421,43 @@ class MessageEvent implements EventInterface
 
     private function roundToNearestHalfHour(DateTime $time): DateTime
     {
-        $minutes = (int) $time->format('i');
+        $minutes = (int)$time->format('i');
 
         if ($minutes < 30) {
-            $time->setTime((int) $time->format('H'), 30);
+            $time->setTime((int)$time->format('H'), 30);
         } else {
-            $time->modify('+1 hour')->setTime((int) $time->format('H'), 0);
+            $time->modify('+1 hour')->setTime((int)$time->format('H'), 0);
         }
 
         return $time;
+    }
+
+    private function getFreeRoom(array $timeRange): string|null
+    {
+        $start = new DateTime($timeRange['start']->format('r'), new DateTimeZone('CET'));
+        $end = new DateTime($timeRange['end']->format('r'), new DateTimeZone('CET'));
+
+        foreach (RoomsEnum::cases() as $case) {
+            $freeBusyRequest = new Google_Service_Calendar_FreeBusyRequest([
+                'timeMin' => $start->format(DateTimeInterface::RFC3339),
+                'timeMax' => $end->format(DateTimeInterface::RFC3339),
+                'items' => [
+                    ['id' => $case->value]
+                ]
+            ]);
+
+            $response = $this->googleCalendar->freebusy->query($freeBusyRequest);
+            $calendars = $response->getCalendars();
+
+            if (isset($calendars[$case->value])) {
+                $busySlots = $calendars[$case->value]->getBusy();
+
+                if (empty($busySlots)) {
+                    return $case->value;
+                }
+            }
+        }
+
+        return null;
     }
 }
