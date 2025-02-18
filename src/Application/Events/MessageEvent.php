@@ -275,15 +275,17 @@ class MessageEvent implements EventInterface
 
             $start = $timeRange['start']->format('r');
             foreach ($spaces as $space) {
-                $message = new Message();
-                $message->setText("You have an appointment. Support meeting is scheduled for $start")
-                    ->setThreadReply(true);
+                if ($space) {
+                    $message = new Message();
+                    $message->setText("You have an appointment. Support meeting is scheduled for $start")
+                        ->setThreadReply(true);
 
-                $request = (new CreateMessageRequest())
-                    ->setParent(ChatServiceClient::spaceName($space))
-                    ->setMessage($message);
+                    $request = (new CreateMessageRequest())
+                        ->setParent(ChatServiceClient::spaceName($space))
+                        ->setMessage($message);
 
-                $this->chatServiceClient->createMessage($request);
+                    $this->chatServiceClient->createMessage($request);
+                }
             }
         }
 
