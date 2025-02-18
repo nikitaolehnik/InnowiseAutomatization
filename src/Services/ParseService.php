@@ -69,14 +69,15 @@ class ParseService
 
     private function parseInterviewCommand(): array
     {
-        $commandInfo = explode(' ', $this->command[1], 2);
-        $clientName = explode('-', $this->spaceName, 3);
+        $commandInfo = explode(' ', $this->command[1]);
+        $dateTime = $commandInfo[1] . ' ' . $commandInfo[2];
+        $clientName = $commandInfo[3] ?? trim(explode('-', $this->spaceName, 3)[1]);
 
         return [
             'command' => $this->command[0],
-            'clientName' => trim($clientName[1]),
+            'clientName' => $clientName,
             'lastNameRu' => $commandInfo[0],
-            'dateTime' => $commandInfo[1],
+            'dateTime' => $dateTime,
         ];
     }
 

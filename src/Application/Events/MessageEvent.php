@@ -30,6 +30,7 @@ class MessageEvent implements EventInterface
     const COLLECTION_NAME_CLIENTS = 'clients';
     const COLLECTION_NAME_REQUESTS = 'requests';
     const COLLECTION_NAME_INTERVIEWS = 'interviews';
+    const COLLECTION_NAME_PREPARATIONS = 'preparations';
 
     public function __construct(
         private readonly MongoClient             $client,
@@ -65,6 +66,15 @@ class MessageEvent implements EventInterface
 
             foreach ($candidates as $candidate) {
                 list($firstName, $lastName) = explode(' ', $candidate['candidate_name']);
+
+                $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
+                ->insertOne([
+                    'name' => $command['requestName'],
+                    'dev' => $lastName,
+                    'cv' => $candidate['link'],
+                ]);
+
                 $data = $this->client->selectDatabase(self::DATABASE_NAME)
                     ->selectCollection(self::COLLECTION_NAME_DEVS)
                     ->aggregate([
