@@ -246,8 +246,7 @@ class MessageEvent implements EventInterface
 
             $attendees[] = $data[0]->email;
             $attendees[] = 'php-interviews@innowise.com';
-            $attendees[] = 'dmitry.coolgun@innowise.com';
-            $attendees[] = 'mikita.shyrayeu@innowise.com';
+            $attendees[] = 'php-preparations@innowise.com';
             $spaces[] = $data[0]->space;
 
             foreach ($data[0]['M_objects'] as $m) {
