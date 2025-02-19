@@ -15,23 +15,35 @@ class ParseService
 
     public function __construct(array $text)
     {
-        $this->command = explode(' ', mb_substr($text['message']['text'], strlen(self::BOT_NAME . ' ')), 2);
-        $chat = explode('/', $text['message']['thread']['name']);
-        $this->space = $chat[1];
-        $this->thread = $chat[3];
-        $chatServiceRead = new ChatServiceClientRead();
-        $this->chatInfo = $chatServiceRead->getFirstMessageInThread($this->space, $this->thread);
-        $this->spaceName = $text['space']['displayName'];
+        if (isset($text['message']['text'])) {
+            $this->command = explode(' ', mb_substr($text['message']['text'], strlen(self::BOT_NAME . ' ')), 2);
+            $chat = explode('/', $text['message']['thread']['name']);
+            $this->space = $chat[1];
+            $this->thread = $chat[3];
+            $chatServiceRead = new ChatServiceClientRead();
+            $this->chatInfo = $chatServiceRead->getFirstMessageInThread($this->space, $this->thread);
+            $this->spaceName = $text['space']['displayName'];
+        }
     }
 
     public function ruleEngine(): array
     {
-        return match ($this->command[0]) {
-            MessageCommandsEnum::Preparation->value => $this->parsePreparationCommand(),
-            MessageCommandsEnum::Request->value => $this->parseRequestCommand(),
-            MessageCommandsEnum::Interview->value => $this->parseInterviewCommand(),
-            MessageCommandsEnum::Result->value => $this->parseResultCommand(),
-        };
+        if (isset($this->command)) {
+            return match ($this->command[0]) {
+                MessageCommandsEnum::Preparation->value => $this->parsePreparationCommand(),
+                MessageCommandsEnum::Request->value => $this->parseRequestCommand(),
+                MessageCommandsEnum::Interview->value => $this->parseInterviewCommand(),
+                MessageCommandsEnum::Result->value => $this->parseResultCommand(),
+                default => [
+                    'command' => 'error',
+                    'description' => $this->command[0],
+                ],
+            };
+        }
+
+        return [
+            'command' => 'error',
+        ];
     }
 
     private function parsePreparationCommand(): array
@@ -42,7 +54,7 @@ class ParseService
         $clientName = explode('-', $requestNameBlock[0]);
 
         return [
-            'command' => $this->command[0],
+            'command' => trim($this->command[0]),
             'requestName' => $requestName[0],
             'cvList' => $cvList,
             'clientName' => trim($clientName[3]),
@@ -55,15 +67,16 @@ class ParseService
         $matches = [];
         $requestName = preg_split('/\n/', $data[1]);
         preg_match('/12\..+\n\d{1,2}/', $data[2], $matches[0]);
-        preg_match('/14\..+\n\d{1,2}/', $data[2], $matches[1]);
+        preg_match('/14\.(.|\n)+?(\n\d{2}\.)/', $data[2], $matches[1]);
         $devsAmount = !empty($matches[0][0]) ? trim(mb_substr($matches[0][0], -2, 2)) : null;
+        $description = preg_match('/\d{2}\.$/', $matches[1][0]) ? mb_substr($matches[1][0], 0, -4) : null;
 
         return [
-            'command' => $this->command[0],
+            'command' => trim($this->command[0]),
             'clientName' => $this->command[1],
             'requestName' => $requestName[0],
             'devsAmount' => $devsAmount ?? null,
-            'description' => $matches[1][0] ?? null,
+            'description' => $description,
         ];
     }
 
@@ -74,7 +87,7 @@ class ParseService
         $clientName = $commandInfo[3] ?? trim(explode('-', $this->spaceName, 3)[1]);
 
         return [
-            'command' => $this->command[0],
+            'command' => trim($this->command[0]),
             'clientName' => $clientName,
             'lastNameRu' => $commandInfo[0],
             'dateTime' => $dateTime,
@@ -87,7 +100,7 @@ class ParseService
         $clientName = explode('-', $this->spaceName, 3);
 
         return [
-            'command' => $this->command[0],
+            'command' => trim($this->command[0]),
             'clientName' => trim($clientName[1]),
             'lastNameRu' => $commandInfo[0],
             'result' => $commandInfo[1],

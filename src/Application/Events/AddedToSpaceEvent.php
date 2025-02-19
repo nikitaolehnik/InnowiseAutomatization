@@ -3,9 +3,11 @@
 namespace App\Application\Events;
 
 use App\Application\Events\Interfaces\EventInterface;
+use App\Services\Interfaces\LoggerInterface;
 use Google\Apps\Chat\V1\Client\ChatServiceClient;
 use Google\Apps\Chat\V1\CreateMessageRequest;
 use Google\Apps\Chat\V1\Message;
+use Google_Service_Calendar;
 use MongoDB\Client as MongoClient;
 
 class AddedToSpaceEvent implements EventInterface
@@ -14,8 +16,10 @@ class AddedToSpaceEvent implements EventInterface
     const COLLECTION_NAME = 'developers';
 
     public function __construct(
-        private readonly MongoClient       $client,
-        private readonly ChatServiceClient $chatServiceClient,
+        private readonly MongoClient             $client,
+        private readonly ChatServiceClient       $chatServiceClient,
+        private readonly Google_Service_Calendar $googleCalendar,
+        protected LoggerInterface                $logger,
     )
     {
     }
@@ -23,6 +27,9 @@ class AddedToSpaceEvent implements EventInterface
     public function handle(array $event): void
     {
         if ($event['space']['spaceType'] !== 'DIRECT_MESSAGE') {
+            $messageEvent = new MessageEvent($this->client, $this->chatServiceClient, $this->googleCalendar, $this->logger);
+            $messageEvent->handle($event);
+
             return;
         }
 

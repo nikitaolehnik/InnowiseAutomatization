@@ -6,6 +6,7 @@ use Exception;
 use Google\Apps\Chat\V1\Client\ChatServiceClient;
 use Google\Apps\Chat\V1\ListMessagesRequest;
 use Google\Client as GoogleClient;
+use Symfony\Component\Dotenv\Dotenv;
 
 class ChatServiceClientRead
 {
@@ -13,7 +14,11 @@ class ChatServiceClientRead
 
     public function __construct()
     {
-        putenv("GOOGLE_APPLICATION_CREDENTIALS_2=" . file_get_contents(__DIR__ . '/../../' . 'credentials_2.json'));
+        if (!getenv('IS_CLOUD_RUN')) {
+            $dotenv = new Dotenv();
+            $dotenv->load(__DIR__ . '/../../.env');
+            putenv("GOOGLE_APPLICATION_CREDENTIALS_2=" . file_get_contents(__DIR__ . '/../../' . 'credentials_2.json'));
+        }
 
         $client = new GoogleClient();
         $client->setClientId($_ENV['GOOGLE_CLIENT_ID_2']);

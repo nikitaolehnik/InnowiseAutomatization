@@ -38,7 +38,7 @@ class EventHandlerAction extends Action
     {
         return match ($event) {
             'MESSAGE' => new MessageEvent($this->client, $this->chatServiceClient, $this->googleCalendar, $this->logger),
-            'ADDED_TO_SPACE' => new AddedToSpaceEvent($this->client, $this->chatServiceClient),
+            'ADDED_TO_SPACE' => new AddedToSpaceEvent($this->client, $this->chatServiceClient, $this->googleCalendar, $this->logger),
         };
     }
 }
