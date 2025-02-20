@@ -38,6 +38,7 @@ class ParseService
                     'command' => 'ERROR',
                     'description' => $this->command[0],
                     'space' => $this->space,
+                    'thread' => $this->thread,
                 ],
             };
         }

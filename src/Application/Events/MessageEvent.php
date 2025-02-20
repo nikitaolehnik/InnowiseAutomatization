@@ -491,12 +491,16 @@ class MessageEvent implements EventInterface
     private function sendErrorResponse(array $data): void
     {
         if ($data['space']) {
+            $thread = new Thread();
+            $thread->setName("spaces/{$data['space']}/threads/{$data['thread']}");
+
             $message = new Message();
             $message->setText($data['description'] . " command not found. Please check your input")
-                ->setThreadReply(true);
+                ->setThread($thread);
 
             $request = (new CreateMessageRequest())
                 ->setParent(ChatServiceClient::spaceName($data['space']))
+                ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
                 ->setMessage($message);
 
             $this->chatServiceClient->createMessage($request);
