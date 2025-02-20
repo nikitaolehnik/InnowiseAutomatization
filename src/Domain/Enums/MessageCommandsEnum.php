@@ -8,4 +8,5 @@ enum MessageCommandsEnum: string
     case Request = 'REQUEST';
     case Interview = 'INTERVIEW';
     case Result = 'RESULT';
+    case Error = 'ERROR';
 }
