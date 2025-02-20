@@ -71,7 +71,7 @@ class MessageEvent implements EventInterface
                 ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
                 ->insertOne([
                     'name' => $command['requestName'],
-                    'dev' => $lastName,
+                    'dev' => "$lastName $firstName",
                     'cv' => $candidate['link'],
                 ]);
 
@@ -113,7 +113,7 @@ class MessageEvent implements EventInterface
                 }
 
                 $candidateList[] = [
-                    'name' => "{$data[0]['name']['first_name_en']} {$data[0]['name']['last_name_en']}",
+                    'name' => "{$data[0]['name']['first_name_ru']} {$data[0]['name']['last_name_ru']}",
                     'link' => $candidate['link'],
                 ];
 
@@ -165,6 +165,7 @@ class MessageEvent implements EventInterface
             $message = new Message();
             $mString = join(', ', array_unique($mList));
             $candidateString = join(', ', array_map(fn($candidate) => $candidate['name'], $candidateList));
+
 
             $message->setText("*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString")
                 ->setThreadReply(true);
@@ -224,10 +225,18 @@ class MessageEvent implements EventInterface
         }
 
         if ($command['command'] === MessageCommandsEnum::Interview->value) {
+            $matchFilter = [
+                'name.last_name_ru' => $command['lastNameRu']
+            ];
+
+            if (!empty($command['firstNameRu'])) {
+                $matchFilter['name.first_name_ru'] = $command['firstNameRu'];
+            }
+
             $cursor = $this->client->selectDatabase(self::DATABASE_NAME)
                 ->selectCollection(self::COLLECTION_NAME_DEVS)
                 ->aggregate([
-                    ['$match' => ['name.last_name_ru' => $command['lastNameRu']]],
+                    ['$match' => $matchFilter],
                     ['$lookup' => [
                         'from' => self::COLLECTION_NAME_DEVS,
                         'localField' => 'M',
@@ -247,6 +256,7 @@ class MessageEvent implements EventInterface
             $attendees[] = $data[0]->email;
             $attendees[] = 'php-interviews@innowise.com';
             $attendees[] = 'dmitry.coolgun@innowise.com';
+            $attendees[] = 'mikita.shyrayeu@innowise.com';
             $spaces[] = $data[0]->space;
 
             foreach ($data[0]['M_objects'] as $m) {
