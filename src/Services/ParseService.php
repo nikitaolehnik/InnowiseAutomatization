@@ -35,8 +35,9 @@ class ParseService
                 MessageCommandsEnum::Interview->value => $this->parseInterviewCommand(),
                 MessageCommandsEnum::Result->value => $this->parseResultCommand(),
                 default => [
-                    'command' => 'error',
+                    'command' => 'ERROR',
                     'description' => $this->command[0],
+                    'space' => $this->space,
                 ],
             };
         }

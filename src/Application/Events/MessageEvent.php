@@ -68,12 +68,12 @@ class MessageEvent implements EventInterface
                 list($firstName, $lastName) = explode(' ', $candidate['candidate_name']);
 
                 $this->client->selectDatabase(self::DATABASE_NAME)
-                ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
-                ->insertOne([
-                    'name' => $command['requestName'],
-                    'dev' => "$lastName $firstName",
-                    'cv' => $candidate['link'],
-                ]);
+                    ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
+                    ->insertOne([
+                        'name' => $command['requestName'],
+                        'dev' => "$lastName $firstName",
+                        'cv' => $candidate['link'],
+                    ]);
 
                 $data = $this->client->selectDatabase(self::DATABASE_NAME)
                     ->selectCollection(self::COLLECTION_NAME_DEVS)
@@ -331,6 +331,10 @@ class MessageEvent implements EventInterface
                     ]
                 );
         }
+
+        if ($command['command'] === MessageCommandsEnum::Error->value) {
+            $this->sendErrorResponse($command);
+        }
     }
 
     private function parseCommand(array $text): array
@@ -482,5 +486,20 @@ class MessageEvent implements EventInterface
         }
 
         return null;
+    }
+
+    private function sendErrorResponse(array $data): void
+    {
+        if ($data['space']) {
+            $message = new Message();
+            $message->setText($data['description'] . " command not found. Please check your input")
+                ->setThreadReply(true);
+
+            $request = (new CreateMessageRequest())
+                ->setParent(ChatServiceClient::spaceName($data['space']))
+                ->setMessage($message);
+
+            $this->chatServiceClient->createMessage($request);
+        }
     }
 }
