@@ -65,6 +65,7 @@ class ParseService
 
     private function parseRequestCommand(): array
     {
+        $description = null;
         $data = preg_split('/(\n){2}/', $this->chatInfo['text']);
         $matches = [];
         $requestName = preg_split('/\n/', $data[1]);
@@ -72,7 +73,10 @@ class ParseService
         preg_match('/14\.(.|\n)+?(\n\*?\d{2}\.)/', $data[2], $matches[1]);
         isset($matches[1][0]) ?: preg_match('/14\.(.|\n)+(\n\*?\d{2}\.)?/', $data[2], $matches[1]);
         $devsAmount = !empty($matches[0][0]) ? trim(mb_substr($matches[0][0], -2, 2)) : null;
-        $description = preg_match('/\d{2}\.$/', $matches[1][0]) ? mb_substr($matches[1][0], 0, -4) : $matches[1][0];
+
+        if (isset($matches[1][0])) {
+            $description = preg_match('/\d{2}\.$/', $matches[1][0]) ? mb_substr($matches[1][0], 0, -4) : $matches[1][0];
+        }
 
         return [
             'command' => trim($this->command[0]),

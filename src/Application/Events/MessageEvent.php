@@ -46,294 +46,33 @@ class MessageEvent implements EventInterface
         $command = $this->parseCommand($event);
 
         if ($command['command'] === MessageCommandsEnum::Preparation->value) {
-            $candidates = [];
+            $this->preparation($command);
 
-            foreach ($command['cvList'] as $candidate) {
-                $pairs = explode(', ', $candidate);
-                $result = [];
-
-                foreach ($pairs as $pair) {
-                    list($key, $value) = explode(' - ', $pair);
-                    $result[$key] = $value;
-                }
-
-                $candidates[] = $result;
-            }
-
-            $attendees = ['php-preparations@innowise.com'];
-            $mList = [];
-            $candidateList = [];
-
-            foreach ($candidates as $candidate) {
-                list($firstName, $lastName) = explode(' ', $candidate['candidate_name']);
-
-                $this->client->selectDatabase(self::DATABASE_NAME)
-                    ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
-                    ->insertOne([
-                        'name' => $command['requestName'],
-                        'dev' => "$lastName $firstName",
-                        'cv' => $candidate['link'],
-                    ]);
-
-                $data = $this->client->selectDatabase(self::DATABASE_NAME)
-                    ->selectCollection(self::COLLECTION_NAME_DEVS)
-                    ->aggregate([
-                        [
-                            '$match' => [
-                                '$and' => [[
-                                    'name.first_name_ru' => $firstName,
-                                    'name.last_name_ru' => $lastName,
-                                ]]
-                            ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'from' => self::COLLECTION_NAME_DEVS,
-                                'localField' => 'M',
-                                'foreignField' => '_id',
-                                'as' => 'M_objects'
-                            ]
-                        ],
-                        [
-                            '$addFields' => [
-                                'M' => '$M_objects'
-                            ]
-                        ],
-                        [
-                            '$project' => [
-                                'M_objects' => 0
-                            ]
-                        ]
-                    ])
-                    ->toArray();
-
-                if (!isset($data[0])) {
-                    $this->logger->error("Candidate {$candidate['candidate_name']} is missing in DB!");
-                    continue;
-                }
-
-                $candidateList[] = [
-                    'name' => "{$data[0]['name']['first_name_ru']} {$data[0]['name']['last_name_ru']}",
-                    'link' => $candidate['link'],
-                ];
-
-                $attendees[] = $data[0]->email;
-
-                $membersRequest = (new ListMembershipsRequest())
-                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-                    ->setPageSize(1000)
-                    ->setFilter("member.type = \"HUMAN\"");
-                $members = $this->chatServiceClient->listMemberships($membersRequest);
-                $mNames = '';
-
-                foreach ($data[0]['M'] as $m) {
-                    $iterator = $members->getIterator();
-
-                    $id = null;
-                    while (($current = $iterator->current()) !== null) {
-                        if ($current->getMember()->getDisplayName() !== "{$m['name']['first_name_en']} {$m['name']['last_name_en']}") {
-                            $iterator->next();
-                            continue;
-                        }
-
-                        $id = explode('/', $current->getMember()->getName())[1];
-                        $iterator->next();
-                    }
-
-                    $mList[] = (is_null($id) ? "{$m['name']['first_name_en']} {$m['name']['last_name_en']}" : ("<users/$id>"));
-                    $mNames .= "{$m['name']['first_name_en']} {$m['name']['last_name_en']}, ";
-                    $attendees[] = $m['email'];
-                }
-
-                $mNames = rtrim($mNames, ', ');
-
-                if (!isset($data[0]['space'])) {
-                    continue;
-                }
-
-                $message = new Message();
-                $message->setText("You have been send to a new request. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact $mNames")
-                    ->setThreadReply(true);
-
-                $request = (new CreateMessageRequest())
-                    ->setParent(ChatServiceClient::spaceName($data[0]['space']))
-                    ->setMessage($message);
-
-                $this->chatServiceClient->createMessage($request);
-            }
-
-            $message = new Message();
-            $mString = join(', ', array_unique($mList));
-            $candidateString = join(', ', array_map(fn($candidate) => $candidate['name'], $candidateList));
-
-
-            $message->setText("*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString")
-                ->setThreadReply(true);
-
-            $request = (new CreateMessageRequest())
-                ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-                ->setMessage($message);
-
-            $response = $this->chatServiceClient->createMessage($request);
-
-            foreach ($candidateList as $candidate) {
-                $thread = new Thread();
-                $thread->setName($response->getThread()->getName());
-
-                $threadMessage = new Message();
-                $threadMessage->setText("CV {$candidate['name']} {$candidate['link']}")
-                    ->setThread($thread);
-
-                $request = (new CreateMessageRequest())
-                    ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-                    ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
-                    ->setMessage($threadMessage);
-
-                $this->chatServiceClient->createMessage($request);
-            }
-
-            $attendees = array_values(array_unique($attendees));
-            $busySlots = $this->getBusySlots($attendees);
-            $timeRange = $this->findCommonFreeTime($busySlots);
-
-            if (is_null($timeRange)) {
-                return;
-            }
-
-            $meetName = 'Request sync ' . $command['clientName'];
-            $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
-            $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+            return;
         }
 
         if ($command['command'] === MessageCommandsEnum::Request->value) {
-            $this->client->selectDatabase(self::DATABASE_NAME)
-                ->selectCollection(self::COLLECTION_NAME_CLIENTS)
-                ->updateOne(
-                    ['name' => $command['clientName']],
-                    ['$set' => ['name' => $command['clientName']]],
-                    ['upsert' => true]
-                );
+            $this->request($command);
 
-            $this->client->selectDatabase(self::DATABASE_NAME)
-                ->selectCollection(self::COLLECTION_NAME_REQUESTS)
-                ->insertOne([
-                    'name' => $command['requestName'],
-                    'description' => $command['description'],
-                    'devs_amount' => $command['devsAmount'],
-                    'client' => $command['clientName'],
-                ]);
+            return;
         }
 
         if ($command['command'] === MessageCommandsEnum::Interview->value) {
-            $matchFilter = [
-                'name.last_name_ru' => $command['lastNameRu']
-            ];
+            $this->interview($command, $event['space']['displayName']);
 
-            if (!empty($command['firstNameRu'])) {
-                $matchFilter['name.first_name_ru'] = $command['firstNameRu'];
-            }
-
-            $cursor = $this->client->selectDatabase(self::DATABASE_NAME)
-                ->selectCollection(self::COLLECTION_NAME_DEVS)
-                ->aggregate([
-                    ['$match' => $matchFilter],
-                    ['$lookup' => [
-                        'from' => self::COLLECTION_NAME_DEVS,
-                        'localField' => 'M',
-                        'foreignField' => '_id',
-                        'as' => 'M_objects'
-                    ]]
-                ]);
-
-            $data = iterator_to_array($cursor);
-
-            if (!isset($data[0])) {
-                $this->logger->error("Candidate {$command['lastNameRu']} is missing in DB!");
-
-                return;
-            }
-
-            $attendees[] = $data[0]->email;
-            $attendees[] = 'php-interviews@innowise.com';
-            $attendees[] = 'dmitry.coolgun@innowise.com';
-            $attendees[] = 'mikita.shyrayeu@innowise.com';
-            $spaces[] = $data[0]->space;
-
-            foreach ($data[0]['M_objects'] as $m) {
-                $attendees[] = $m['email'];
-                $spaces[] = $m['space'] ?? null;
-            }
-
-            $timeStart = (DateTime::createFromFormat('d.m H:i', $command['dateTime'], new DateTimeZone('CET')));
-            $timeEnd = clone $timeStart;
-            $timeRange = [
-                'start' => $timeStart->modify('-15 minutes'),
-                'end' => $timeEnd->modify('+1 hours'),
-            ];
-
-            $attendees[] = $this->getFreeRoom($timeRange);
-            $meetName = $data[0]['name']['last_name_en'] . '. Support. ' . $command['clientName'];
-            $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
-            $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
-
-            $this->client->selectDatabase(self::DATABASE_NAME)
-                ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
-                ->insertOne([
-                    'dev' => $data[0]['name']['last_name_ru'],
-                    'client' => $command['clientName'],
-                    'request' => $event['space']['displayName'],
-                ]);
-
-            $start = $timeRange['start']->format('r');
-            foreach ($spaces as $space) {
-                if ($space) {
-                    $message = new Message();
-                    $message->setText("You have an appointment. Support meeting is scheduled for $start")
-                        ->setThreadReply(true);
-
-                    $request = (new CreateMessageRequest())
-                        ->setParent(ChatServiceClient::spaceName($space))
-                        ->setMessage($message);
-
-                    $this->chatServiceClient->createMessage($request);
-                }
-            }
+            return;
         }
 
         if ($command['command'] === MessageCommandsEnum::Result->value) {
-            $this->client->selectDatabase(self::DATABASE_NAME)
-                ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
-                ->updateOne(
-                    [
-                        '$and' => [
-                            ['dev' => $command['lastNameRu']],
-                            ['request' => $command['spaceName']],
-                            [
-                                '$or' => [
-                                    ['result' => ['$exists' => false]],
-                                    ['result' => '']
-                                ]
-                            ]
-                        ]
-                    ],
-                    [
-                        '$set' => [
-                            'result' => $command['result']
-                        ],
-                        '$setOnInsert' => [
-                            'dev' => $command['lastNameRu'],
-                            'client' => $command['clientName'],
-                            'request' => $command['spaceName'],
-                        ]
-                    ],
-                    [
-                        'upsert' => true
-                    ]
-                );
+            $this->result($command);
+
+            return;
         }
 
         if ($command['command'] === MessageCommandsEnum::Error->value) {
             $this->sendErrorResponse($command);
+
+            return;
         }
     }
 
@@ -505,5 +244,365 @@ class MessageEvent implements EventInterface
 
             $this->chatServiceClient->createMessage($request);
         }
+    }
+
+    private function preparation($command): void
+    {
+        $candidates = [];
+
+        foreach ($command['cvList'] as $candidate) {
+            $pairs = explode(', ', $candidate);
+            $result = [];
+
+            foreach ($pairs as $pair) {
+                list($key, $value) = explode(' - ', $pair);
+                $result[$key] = $value;
+            }
+
+            $candidates[] = $result;
+        }
+
+        $attendees = ['php-preparations@innowise.com'];
+        $mList = [];
+        $candidateList = [];
+
+        foreach ($candidates as $candidate) {
+            list($firstName, $lastName) = explode(' ', $candidate['candidate_name']);
+
+            $data = $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_DEVS)
+                ->aggregate([
+                    [
+                        '$search' => [
+                            'index' => 'devs',
+                            'compound' => [
+                                'must' => [
+                                    [
+                                        'text' => [
+                                            'query' => $firstName,
+                                            'path' => 'name.first_name_ru',
+                                            'fuzzy' => [
+                                                'maxEdits' => 1
+                                            ]
+                                        ]
+                                    ],
+                                    [
+                                        'text' => [
+                                            'query' => $lastName,
+                                            'path' => 'name.last_name_ru',
+                                            'fuzzy' => [
+                                                'maxEdits' => 1
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => self::COLLECTION_NAME_DEVS,
+                            'localField' => 'M',
+                            'foreignField' => '_id',
+                            'as' => 'M_objects'
+                        ]
+                    ],
+                    [
+                        '$addFields' => [
+                            'M' => '$M_objects'
+                        ]
+                    ],
+                    [
+                        '$project' => [
+                            'M_objects' => 0
+                        ]
+                    ]
+                ])
+                ->toArray();
+
+            if (!isset($data[0])) {
+                $this->logger->error("Candidate {$candidate['candidate_name']} is missing, inserting new document in DB.");
+                $data[0]['name']['first_name_ru'] = $firstName;
+                $data[0]['name']['last_name_ru'] = $lastName;
+
+                $this->client->selectDatabase(self::DATABASE_NAME)
+                    ->selectCollection(self::COLLECTION_NAME_DEVS)
+                    ->insertOne([
+                        'name' => [
+                            'first_name_ru' => $firstName,
+                            'last_name_ru' => $lastName
+                        ]
+                    ]);
+            }
+
+            $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
+                ->insertOne([
+                    'request_name' => $command['requestName'],
+                    'client_name' => $command['clientName'],
+                    'dev' => "{$data[0]['name']['first_name_ru']} {$data[0]['name']['last_name_ru']}",
+                    'cv' => $candidate['link'],
+                ]);
+
+            $candidateList[] = [
+                'name' => "{$data[0]['name']['first_name_ru']} {$data[0]['name']['last_name_ru']}",
+                'link' => $candidate['link'],
+            ];
+
+            if (isset($data[0]->email)) {
+                $attendees[] = $data[0]->email;
+            }
+
+            $membersRequest = (new ListMembershipsRequest())
+                ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+                ->setPageSize(1000)
+                ->setFilter("member.type = \"HUMAN\"");
+            $members = $this->chatServiceClient->listMemberships($membersRequest);
+            $mNames = '';
+
+            if (!isset($data[0]['M'])) {
+                foreach ($data[0]['M'] as $m) {
+                    $iterator = $members->getIterator();
+
+                    $id = null;
+                    while (($current = $iterator->current()) !== null) {
+                        if ($current->getMember()->getDisplayName() !== "{$m['name']['first_name_en']} {$m['name']['last_name_en']}") {
+                            $iterator->next();
+                            continue;
+                        }
+
+                        $id = explode('/', $current->getMember()->getName())[1];
+                        $iterator->next();
+                    }
+
+                    $mList[] = (is_null($id) ? "{$m['name']['first_name_en']} {$m['name']['last_name_en']}" : ("<users/$id>"));
+                    $mNames .= "{$m['name']['first_name_en']} {$m['name']['last_name_en']}, ";
+                    $attendees[] = $m['email'];
+                }
+            }
+
+            $mNames = rtrim($mNames, ', ');
+
+            if (!isset($data[0]['space'])) {
+                continue;
+            }
+
+            $message = new Message();
+            $message->setText("You have been send to a new request. Here is your CV: {$candidate['link']}. If you don't have access to it, please contact $mNames")
+                ->setThreadReply(true);
+
+            $request = (new CreateMessageRequest())
+                ->setParent(ChatServiceClient::spaceName($data[0]['space']))
+                ->setMessage($message);
+
+            $this->chatServiceClient->createMessage($request);
+        }
+
+        $message = new Message();
+        $mString = join(', ', array_unique($mList));
+        $candidateString = join(', ', array_map(fn($candidate) => $candidate['name'], $candidateList));
+
+
+        $message->setText("*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString")
+            ->setThreadReply(true);
+
+        $request = (new CreateMessageRequest())
+            ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+            ->setMessage($message);
+
+        $response = $this->chatServiceClient->createMessage($request);
+
+        foreach ($candidateList as $candidate) {
+            $thread = new Thread();
+            $thread->setName($response->getThread()->getName());
+
+            $threadMessage = new Message();
+            $threadMessage->setText("CV {$candidate['name']} {$candidate['link']}")
+                ->setThread($thread);
+
+            $request = (new CreateMessageRequest())
+                ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+                ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
+                ->setMessage($threadMessage);
+
+            $this->chatServiceClient->createMessage($request);
+        }
+
+        $attendees = array_values(array_unique($attendees));
+        $busySlots = $this->getBusySlots($attendees);
+        $timeRange = $this->findCommonFreeTime($busySlots);
+
+        if (is_null($timeRange)) {
+            return;
+        }
+
+        $meetName = 'Request sync ' . $command['clientName'];
+        $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
+        $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+    }
+
+    private function request($command): void
+    {
+        $pipeline = [
+            [
+                '$search' => [
+                    'index' => 'client',
+                    'compound' => [
+                        'must' => [
+                            [
+                                'text' => [
+                                    'query' => $command['clientName'],
+                                    'path' => 'name',
+                                    'fuzzy' => [
+                                        'maxEdits' => 1
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                '$limit' => 1
+            ],
+            [
+                '$project' => [
+                    'name' => 1
+                ]
+            ]
+        ];
+
+        $cursor = $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_CLIENTS)
+            ->aggregate($pipeline);
+
+        $document = current(iterator_to_array($cursor));
+
+        if ($document) {
+            $this->client->selectDatabase(self::DATABASE_NAME)
+                ->selectCollection(self::COLLECTION_NAME_CLIENTS)
+                ->insertOne([
+                    'name' => $command['clientName']
+                ]);
+        }
+
+        $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_REQUESTS)
+            ->insertOne([
+                'name' => $command['requestName'],
+                'description' => $command['description'],
+                'devs_amount' => $command['devsAmount'],
+                'client' => $command['clientName'],
+            ]);
+    }
+
+    private function interview($command, $spaceName): void
+    {
+        $matchFilter = [
+            'name.last_name_ru' => $command['lastNameRu']
+        ];
+
+        if (!empty($command['firstNameRu'])) {
+            $matchFilter['name.first_name_ru'] = $command['firstNameRu'];
+        }
+
+        $cursor = $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_DEVS)
+            ->aggregate([
+                ['$match' => $matchFilter],
+                ['$lookup' => [
+                    'from' => self::COLLECTION_NAME_DEVS,
+                    'localField' => 'M',
+                    'foreignField' => '_id',
+                    'as' => 'M_objects'
+                ]]
+            ]);
+
+        $data = iterator_to_array($cursor);
+
+        if (!isset($data[0])) {
+            $this->logger->error("Candidate {$command['lastNameRu']} is missing in DB!");
+
+            return;
+        }
+
+        $attendees[] = $data[0]->email;
+        $attendees[] = 'php-interviews@innowise.com';
+        $attendees[] = 'dmitry.coolgun@innowise.com';
+        $attendees[] = 'mikita.shyrayeu@innowise.com';
+        $spaces[] = $data[0]->space;
+
+        foreach ($data[0]['M_objects'] as $m) {
+            $attendees[] = $m['email'];
+            $spaces[] = $m['space'] ?? null;
+        }
+
+        $timeStart = (DateTime::createFromFormat('d.m H:i', $command['dateTime'], new DateTimeZone('CET')));
+        $timeEnd = clone $timeStart;
+        $timeRange = [
+            'start' => $timeStart->modify('-15 minutes'),
+            'end' => $timeEnd->modify('+1 hours'),
+        ];
+
+        $attendees[] = $this->getFreeRoom($timeRange);
+        $meetName = $data[0]['name']['last_name_en'] . '. Support. ' . $command['clientName'];
+        $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
+        $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
+
+        $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
+            ->insertOne([
+                'dev' => $data[0]['name']['last_name_ru'],
+                'client' => $command['clientName'],
+                'request' => $spaceName,
+            ]);
+
+        $start = $timeRange['start']->format('r');
+        foreach ($spaces as $space) {
+            if ($space) {
+                $message = new Message();
+                $message->setText("You have an appointment. Support meeting is scheduled for $start")
+                    ->setThreadReply(true);
+
+                $request = (new CreateMessageRequest())
+                    ->setParent(ChatServiceClient::spaceName($space))
+                    ->setMessage($message);
+
+                $this->chatServiceClient->createMessage($request);
+            }
+        }
+    }
+
+    private function result($command): void
+    {
+        $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
+            ->updateOne(
+                [
+                    '$and' => [
+                        ['dev' => $command['lastNameRu']],
+                        ['request' => $command['spaceName']],
+                        [
+                            '$or' => [
+                                ['result' => ['$exists' => false]],
+                                ['result' => '']
+                            ]
+                        ]
+                    ]
+                ],
+                [
+                    '$set' => [
+                        'result' => $command['result']
+                    ],
+                    '$setOnInsert' => [
+                        'dev' => $command['lastNameRu'],
+                        'client' => $command['clientName'],
+                        'request' => $command['spaceName'],
+                    ]
+                ],
+                [
+                    'upsert' => true
+                ]
+            );
     }
 }
