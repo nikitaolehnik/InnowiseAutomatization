@@ -361,7 +361,7 @@ class MessageEvent implements EventInterface
             $members = $this->chatServiceClient->listMemberships($membersRequest);
             $mNames = '';
 
-            if (!isset($data[0]['M'])) {
+            if (isset($data[0]['M'])) {
                 foreach ($data[0]['M'] as $m) {
                     $iterator = $members->getIterator();
 
