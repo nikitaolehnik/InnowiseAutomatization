@@ -84,6 +84,8 @@ class ParseService
             'requestName' => $requestName[0],
             'devsAmount' => $devsAmount ?? null,
             'description' => $description,
+            'space' => $this->space,
+            'thread' => $this->thread,
         ];
     }
 

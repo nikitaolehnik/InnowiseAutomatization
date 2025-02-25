@@ -9,6 +9,8 @@ use App\Skeleton\ResponseEmitter\ResponseEmitter;
 use DI\ContainerBuilder;
 use Slim\Factory\AppFactory;
 use Slim\Factory\ServerRequestCreatorFactory;
+use Slim\Views\Twig;
+use Slim\Views\TwigMiddleware;
 use Symfony\Component\Dotenv\Dotenv;
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -62,6 +64,10 @@ set_error_handler(function ($errno, $errstr, $errfile, $errline) { // TODO: Tric
 
     return false;
 });
+
+$twig = Twig::create(__DIR__ . '/../templates', ['cache' => false]);
+
+$app->add(TwigMiddleware::create($app, $twig));
 
 $app->addRoutingMiddleware();
 

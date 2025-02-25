@@ -70,7 +70,8 @@ class MessageEvent implements EventInterface
         }
 
         if ($command['command'] === MessageCommandsEnum::Error->value) {
-            $this->sendErrorResponse($command);
+            $text = $command['description'] . ' command not found. Please check your input';
+            $this->sendThreadResponse($command, $text);
 
             return;
         }
@@ -227,14 +228,14 @@ class MessageEvent implements EventInterface
         return null;
     }
 
-    private function sendErrorResponse(array $data): void
+    private function sendThreadResponse(array $data, string $text): void
     {
         if ($data['space']) {
             $thread = new Thread();
             $thread->setName("spaces/{$data['space']}/threads/{$data['thread']}");
 
             $message = new Message();
-            $message->setText($data['description'] . " command not found. Please check your input")
+            $message->setText($text)
                 ->setThread($thread);
 
             $request = (new CreateMessageRequest())
@@ -464,11 +465,6 @@ class MessageEvent implements EventInterface
             ],
             [
                 '$limit' => 1
-            ],
-            [
-                '$project' => [
-                    'name' => 1
-                ]
             ]
         ];
 
@@ -478,7 +474,11 @@ class MessageEvent implements EventInterface
 
         $document = current(iterator_to_array($cursor));
 
-        if ($document) {
+        if (isset($document['name'])) {
+            $command['clientName'] = $document['name'];
+        }
+
+        if (!$document) {
             $this->client->selectDatabase(self::DATABASE_NAME)
                 ->selectCollection(self::COLLECTION_NAME_CLIENTS)
                 ->insertOne([
@@ -494,6 +494,39 @@ class MessageEvent implements EventInterface
                 'devs_amount' => $command['devsAmount'],
                 'client' => $command['clientName'],
             ]);
+
+        $preparations = $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_PREPARATIONS)
+            ->find(['client_name' => $command['clientName']])->toArray();
+
+        $interviews = $this->client->selectDatabase(self::DATABASE_NAME)
+            ->selectCollection(self::COLLECTION_NAME_INTERVIEWS)
+            ->find(['client' => $command['clientName']])->toArray();
+        $text = null;
+
+        if (!empty($preparations) || !empty($interviews)) {
+            $text = $command['clientName'] . ". The candidates we sent:\n";
+
+            if (!empty($preparations)) {
+                $text .= "\n*Preparations:*\n";
+
+                foreach ($preparations as $key => $preparation) {
+                    $key += 1;
+                    $text .= "$key. " . $preparation['dev'] . "\n" . $preparation['cv'] . "\n";
+                }
+            }
+
+            if (!empty($interviews)) {
+                $text .= "\n*Interviews:*\n";
+
+                foreach ($interviews as $key => $interview) {
+                    $key += 1;
+                    $text .= "$key. " . $interview['dev'] . "\n";
+                }
+            }
+        }
+
+        $this->sendThreadResponse($command, $text);
     }
 
     private function interview($command, $spaceName): void
