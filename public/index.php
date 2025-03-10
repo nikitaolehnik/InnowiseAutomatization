@@ -65,7 +65,11 @@ set_error_handler(function ($errno, $errstr, $errfile, $errline) { // TODO: Tric
     return false;
 });
 
-$twig = Twig::create(__DIR__ . '/../templates', ['cache' => false]);
+try {
+    $twig = Twig::create(__DIR__ . '/../templates', ['cache' => false]);
+} catch (\Twig\Error\LoaderError $e) {
+    return '';
+}
 
 $app->add(TwigMiddleware::create($app, $twig));
 
