@@ -2,5 +2,6 @@
 /vendor/
 /credentials.json
 /credentials_2.json
+/credentials_sheets.json
 .env
 /node_modules/
