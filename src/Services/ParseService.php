@@ -55,7 +55,17 @@ class ParseService
         $cvList = preg_split('/CV\s\d+:\s/', $this->command[1], -1, PREG_SPLIT_NO_EMPTY);
         $clientName = explode('-', $requestNameBlock[0]);
 
-        $lines = explode("\n",  $requestNameBlock[2]);
+
+        $requestDescriptionFull = '';
+        for ($i = 2; $i < count($requestNameBlock) || (isset($requestNameBlock[$i]) && $requestNameBlock[$i] === '@all'); $i++) {
+            if ($requestNameBlock[$i] === '@all') {
+                break;
+            }
+
+            $requestDescriptionFull .= $requestNameBlock[$i] . "\n";
+        }
+
+        $lines = explode("\n", $requestDescriptionFull);
         $processedLines = array_map(function($line) {
             if (preg_match('/^\d+\./', $line)) {
                 return "*$line*";
