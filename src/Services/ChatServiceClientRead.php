@@ -44,7 +44,7 @@ class ChatServiceClientRead
         return $this->chatServiceClientRead;
     }
 
-    public function getFirstMessageInThread($spaceId, $threadId): array|null
+    public function getFirstMessageInThread(string $spaceId, string $threadId): array|null
     {
         $threadName = "spaces/$spaceId/threads/$threadId";
         $spaceName = "spaces/$spaceId";

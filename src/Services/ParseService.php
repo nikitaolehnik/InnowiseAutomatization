@@ -10,7 +10,7 @@ class ParseService
     private array $command;
     private string $space;
     private string $thread;
-    private  array $chatInfo;
+    private array $chatInfo;
     private string $spaceName;
 
     public function __construct(array $text)
@@ -55,11 +55,21 @@ class ParseService
         $cvList = preg_split('/CV\s\d+:\s/', $this->command[1], -1, PREG_SPLIT_NO_EMPTY);
         $clientName = explode('-', $requestNameBlock[0]);
 
+        $lines = explode("\n",  $requestNameBlock[2]);
+        $processedLines = array_map(function($line) {
+            if (preg_match('/^\d+\./', $line)) {
+                return "*$line*";
+            }
+            return $line;
+        }, $lines);
+        $requestDescription = implode("\n", $processedLines);
+
         return [
             'command' => trim($this->command[0]),
             'requestName' => $requestName[0],
             'cvList' => $cvList,
             'clientName' => trim($clientName[3]),
+            'requestDescription' => $requestDescription
         ];
     }
 

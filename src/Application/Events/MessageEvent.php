@@ -23,7 +23,6 @@ use MongoDB\Client as MongoClient;
 
 class MessageEvent implements EventInterface
 {
-    const BOT_NAME = '@PHP Bot';
     const SPACE_NAME = 'AAAASkaq4uc';
     const DATABASE_NAME = 'innowise-automatization';
     const COLLECTION_NAME_DEVS = 'developers';
@@ -247,7 +246,7 @@ class MessageEvent implements EventInterface
         }
     }
 
-    private function preparation($command): void
+    private function preparation(array $command): void
     {
         $candidates = [];
 
@@ -428,6 +427,20 @@ class MessageEvent implements EventInterface
 
             $this->chatServiceClient->createMessage($request);
         }
+
+        $thread = new Thread();
+        $thread->setName($response->getThread()->getName());
+
+        $threadMessage = new Message();
+        $threadMessage->setText($command['requestDescription'])
+            ->setThread($thread);
+
+        $request = (new CreateMessageRequest())
+            ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+            ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
+            ->setMessage($threadMessage);
+
+        $this->chatServiceClient->createMessage($request);
 
         $attendees = array_values(array_unique($attendees));
         $busySlots = $this->getBusySlots($attendees);
