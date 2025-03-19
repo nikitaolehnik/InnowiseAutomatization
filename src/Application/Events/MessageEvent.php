@@ -23,7 +23,7 @@ use MongoDB\Client as MongoClient;
 
 class MessageEvent implements EventInterface
 {
-    const SPACE_NAME = 'AAAAzZMMCbc';
+    const SPACE_NAME = 'AAAASkaq4uc';
     const DATABASE_NAME = 'innowise-automatization';
     const COLLECTION_NAME_DEVS = 'developers';
     const COLLECTION_NAME_CLIENTS = 'clients';
