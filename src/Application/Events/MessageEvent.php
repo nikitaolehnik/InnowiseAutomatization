@@ -82,7 +82,7 @@ class MessageEvent implements EventInterface
         return $parseService->ruleEngine();
     }
 
-    private function getCalendarEvent(array $attendees, array $timeRange, string $meetName): Google_Service_Calendar_Event
+    private function getCalendarEvent(array $attendees, array $timeRange, string $meetName, string $description = ""): Google_Service_Calendar_Event
     {
         return new Google_Service_Calendar_Event([
             'summary' => $meetName,
@@ -107,6 +107,7 @@ class MessageEvent implements EventInterface
                 ],
             ],
             'guestsCanModify' => true,
+            'description' => $description,
         ]);
     }
 
@@ -451,7 +452,7 @@ class MessageEvent implements EventInterface
         }
 
         $meetName = 'Request sync ' . $command['clientName'];
-        $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName);
+        $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName, join(PHP_EOL, $command['cvList']));
         $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
     }
 
