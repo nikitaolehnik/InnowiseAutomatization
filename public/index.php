@@ -14,6 +14,7 @@ use Slim\Views\TwigMiddleware;
 use Symfony\Component\Dotenv\Dotenv;
 
 require __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../app/helper-functions.php';
 
 if (!getenv('IS_CLOUD_RUN')) {
     $dotenv = new Dotenv();

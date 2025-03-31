@@ -4,6 +4,7 @@ namespace App\Application\Events;
 
 use App\Application\Events\Interfaces\EventInterface;
 use App\Domain\Enums\MessageCommandsEnum;
+use App\Domain\Enums\PreparationFlagsEnum;
 use App\Domain\Enums\RoomsEnum;
 use App\Services\Interfaces\LoggerInterface;
 use App\Services\ParseService;
@@ -23,7 +24,7 @@ use MongoDB\Client as MongoClient;
 
 class MessageEvent implements EventInterface
 {
-    const SPACE_NAME = 'AAAASkaq4uc';
+    const SPACE_NAME = 'AAAAzZMMCbc';
     const DATABASE_NAME = 'innowise-automatization';
     const COLLECTION_NAME_DEVS = 'developers';
     const COLLECTION_NAME_CLIENTS = 'clients';
@@ -403,8 +404,12 @@ class MessageEvent implements EventInterface
         $mString = join(', ', array_unique($mList));
         $candidateString = join(', ', array_map(fn($candidate) => $candidate['name'], $candidateList));
 
+        $text = "*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString";
+        if (isset($command['flags'][PreparationFlagsEnum::COMMENT->value])) {
+            $text .= "\n*Additional info:* " . $command['flags'][PreparationFlagsEnum::COMMENT->value];
+        }
 
-        $message->setText("*{$command['requestName']}* \n👥: $candidateString\nⓂ️: $mString")
+        $message->setText($text)
             ->setThreadReply(true);
 
         $request = (new CreateMessageRequest())
@@ -413,35 +418,15 @@ class MessageEvent implements EventInterface
 
         $response = $this->chatServiceClient->createMessage($request);
 
+        $this->sendMessageToThread($response, $command['requestDescription']);
+
         foreach ($candidateList as $candidate) {
-            $thread = new Thread();
-            $thread->setName($response->getThread()->getName());
-
-            $threadMessage = new Message();
-            $threadMessage->setText("CV {$candidate['name']} {$candidate['link']}")
-                ->setThread($thread);
-
-            $request = (new CreateMessageRequest())
-                ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-                ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
-                ->setMessage($threadMessage);
-
-            $this->chatServiceClient->createMessage($request);
+            $this->sendMessageToThread($response, "CV {$candidate['name']} {$candidate['link']}");
         }
 
-        $thread = new Thread();
-        $thread->setName($response->getThread()->getName());
-
-        $threadMessage = new Message();
-        $threadMessage->setText($command['requestDescription'])
-            ->setThread($thread);
-
-        $request = (new CreateMessageRequest())
-            ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
-            ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
-            ->setMessage($threadMessage);
-
-        $this->chatServiceClient->createMessage($request);
+        if (isset($command['flags'][PreparationFlagsEnum::NOSYNC->value]) && $command['flags'][PreparationFlagsEnum::NOSYNC->value]) {
+            return;
+        }
 
         $attendees = array_values(array_unique($attendees));
         $busySlots = $this->getBusySlots($attendees);
@@ -451,8 +436,14 @@ class MessageEvent implements EventInterface
             return;
         }
 
+        $description = join(PHP_EOL, $command['cvList']);
+
+        if (isset($command['flags'][PreparationFlagsEnum::COMMENT->value])) {
+            $description = "Additional info: " . $command['flags'][PreparationFlagsEnum::COMMENT->value] . PHP_EOL . $description;
+        }
+
         $meetName = 'Request sync ' . $command['clientName'];
-        $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName, join(PHP_EOL, $command['cvList']));
+        $calendarEvent = $this->getCalendarEvent($attendees, $timeRange, $meetName, $description);
         $this->googleCalendar->events->insert('primary', $calendarEvent, ['conferenceDataVersion' => 1]);
     }
 
@@ -651,5 +642,21 @@ class MessageEvent implements EventInterface
                     'upsert' => true
                 ]
             );
+    }
+    private function sendMessageToThread(Message $response, string $message): void
+    {
+        $thread = new Thread();
+        $thread->setName($response->getThread()->getName());
+
+        $threadMessage = new Message();
+        $threadMessage->setText($message)
+            ->setThread($thread);
+
+        $request = (new CreateMessageRequest())
+            ->setParent(ChatServiceClient::spaceName(self::SPACE_NAME))
+            ->setMessageReplyOption(CreateMessageRequest\MessageReplyOption::REPLY_MESSAGE_OR_FAIL)
+            ->setMessage($threadMessage);
+
+        $this->chatServiceClient->createMessage($request);
     }
 }

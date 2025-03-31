@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Domain\Enums\MessageCommandsEnum;
+use JetBrains\PhpStorm\ArrayShape;
 
 class ParseService
 {
@@ -48,13 +49,14 @@ class ParseService
         ];
     }
 
+    #[ArrayShape(['command' => 'string', 'requestName' => 'string', 'cvList' => 'array', 'clientName' => 'string', 'requestDescription' => 'string', 'flags' => 'array'])]
     private function parsePreparationCommand(): array
     {
+        $flags = $this->getCommandFlags();
         $requestNameBlock = preg_split('/(\r\n|\n|\r){2}/', $this->chatInfo['text']);
         $requestName = preg_split('/\n/', $requestNameBlock[1]);
         $cvList = preg_split('/CV\s\d+:\s/', $this->command[1], -1, PREG_SPLIT_NO_EMPTY);
         $clientName = explode('-', $requestNameBlock[0]);
-
 
         $requestDescriptionFull = '';
         for ($i = 2; $i < count($requestNameBlock) || (isset($requestNameBlock[$i]) && $requestNameBlock[$i] === '@all'); $i++) {
@@ -79,7 +81,8 @@ class ParseService
             'requestName' => $requestName[0],
             'cvList' => $cvList,
             'clientName' => trim($clientName[3]),
-            'requestDescription' => $requestDescription
+            'requestDescription' => $requestDescription,
+            'flags' => $flags,
         ];
     }
 
@@ -166,5 +169,19 @@ class ParseService
         $parts = explode('-', $spaceName, 3);
 
         return isset($parts[1]) ? trim($parts[1]) : '';
+    }
+
+    private function getCommandFlags(): array
+    {
+        $flags = [];
+
+        $command = preg_replace_callback('/--([A-Z-]+)(?:\s+"([^"]+)")?/', function ($matches) use (&$flags) {
+            $flagName = $matches[1];
+            $flags[$flagName] = $matches[2] ?? true;
+            return '';
+        }, $this->command[1]);
+
+        $this->command[1] = trim(preg_replace('/\s+/', ' ', $command));
+        return $flags;
     }
 }
